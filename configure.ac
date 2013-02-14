@@ -2,9 +2,9 @@ AC_PREREQ([2.63])
 
 AC_INIT([desktop-webapp-browser-extension],
         [0.1],
-	[https://git.internal.collabora.co.uk/git/users/rodrigo/desktop-webapp-browser-extension.git/],
+	[https://github.com/rodrmoya/desktop-webapp-browser-extension],
 	[desktop-webapp-browser-extension],
-	[https://git.internal.collabora.co.uk/git/users/rodrigo/desktop-webapp-browser-extension.git/])
+	[https://github.com/rodrmoya/desktop-webapp-browser-extension])
 
 AC_CONFIG_HEADERS([config.h])
 
