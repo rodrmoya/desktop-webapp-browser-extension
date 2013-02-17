@@ -24,6 +24,7 @@
 
 #include "config.h"
 
+#include <string.h>
 #include "object.h"
 #include <glib.h>
 #include <gio/gio.h>
@@ -32,6 +33,7 @@
 typedef struct {
   NPObject object;
   GHashTable *methods;
+  GFileMonitor *monitor;
 } WebappObjectWrapper;
 
 typedef NPVariant (*WebappMethod) (NPObject *object,
@@ -434,6 +436,53 @@ uninstall_chrome_app_wrapper (NPObject *object,
   return result;
 }
 
+static void
+on_directory_changed (GFileMonitor     *monitor,
+		      GFile            *file,
+		      GFile            *other_file,
+		      GFileMonitorEvent event_type,
+		      gpointer          user_data)
+{
+  g_debug ("%s called", G_STRFUNC);
+
+  if (event_type == G_FILE_MONITOR_EVENT_CREATED) {
+     GError *error = NULL;
+     gchar *contents;
+     gsize len;
+
+     if (g_file_get_contents (g_file_get_path (file), &contents, &len, &error)) {
+       gchar *tmp = contents;
+       const gchar *shebang = "#!/usr/bin/env xdg-open";
+
+       g_debug ("Old contents = %s\n", contents);
+
+       /* Read 1st line */
+       if (!strncmp (contents, shebang, strlen (shebang))) {
+	 tmp += strlen (shebang);
+	 if (*tmp == '[') {
+	   GString *new_contents = g_string_new (shebang);
+
+	   new_contents = g_string_append (new_contents, "\n");
+	   new_contents = g_string_append (new_contents, tmp);
+
+	   if (!g_file_set_contents (g_file_get_path (file), new_contents->str, new_contents->len, &error)) {
+	     g_warning ("Could not write %s file: %s", g_file_get_path (file), error->message);
+	     g_error_free (error);
+	   } else
+	     g_debug ("New contents: %s\n", new_contents->str);
+
+	   g_string_free (new_contents, TRUE);
+	 }
+       }
+       g_free (contents);
+
+     } else {
+       g_warning ("Could not read %s file: %s", g_file_get_path (file), error->message);
+       g_error_free (error);
+     }
+  }
+}
+
 NPObject *
 webapp_create_plugin_object (NPP instance)
 {
@@ -442,14 +491,33 @@ webapp_create_plugin_object (NPP instance)
 
   g_debug ("%s()", G_STRFUNC);
 
+  g_type_init ();
+
   WebappObjectWrapper *wrapper = (WebappObjectWrapper *) object;
 
+  /* Public methods */
   g_hash_table_insert (wrapper->methods,
 		       (gchar *) "installChromeApp",
 		       install_chrome_app_wrapper);
   g_hash_table_insert (wrapper->methods,
 		       (gchar *) "uninstallChromeApp",
 		       uninstall_chrome_app_wrapper);
+
+  /* Monitor ~/.local/share/applications */
+  gchar *path = g_strdup_printf ("%s/.local/share/applications", g_get_home_dir ());
+  GFile *file = g_file_new_for_path (path);
+  g_free (path);
+
+  GError *error = NULL;
+  wrapper->monitor = g_file_monitor_directory (file, 0, NULL, &error);
+  if (wrapper->monitor) {
+    g_signal_connect (wrapper->monitor, "changed", G_CALLBACK (on_directory_changed), wrapper);
+  } else {
+    g_error ("Error monitoring directory: %s\n", error->message);
+    g_error_free (error);
+  }
+
+  g_object_unref (file);
 
   return object;
 }
