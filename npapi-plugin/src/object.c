@@ -449,8 +449,12 @@ on_directory_changed (GFileMonitor     *monitor,
      GError *error = NULL;
      gchar *contents;
      gsize len;
+     const gchar *file_path = g_file_get_path (file);
 
-     if (g_file_get_contents (g_file_get_path (file), &contents, &len, &error)) {
+     if (!g_str_has_prefix (g_basename (file_path), "chrome-"))
+       return;
+
+     if (g_file_get_contents (file_path, &contents, &len, &error)) {
        gchar *tmp = contents;
        const gchar *shebang = "#!/usr/bin/env xdg-open";
 
@@ -465,8 +469,8 @@ on_directory_changed (GFileMonitor     *monitor,
 	   new_contents = g_string_append (new_contents, "\n");
 	   new_contents = g_string_append (new_contents, tmp);
 
-	   if (!g_file_set_contents (g_file_get_path (file), new_contents->str, new_contents->len, &error)) {
-	     g_warning ("Could not write %s file: %s", g_file_get_path (file), error->message);
+	   if (!g_file_set_contents (file_path, new_contents->str, new_contents->len, &error)) {
+	     g_warning ("Could not write %s file: %s", file_path, error->message);
 	     g_error_free (error);
 	   } else
 	     g_debug ("New contents: %s\n", new_contents->str);
@@ -477,7 +481,7 @@ on_directory_changed (GFileMonitor     *monitor,
        g_free (contents);
 
      } else {
-       g_warning ("Could not read %s file: %s", g_file_get_path (file), error->message);
+       g_warning ("Could not read %s file: %s", file_path, error->message);
        g_error_free (error);
      }
   }
