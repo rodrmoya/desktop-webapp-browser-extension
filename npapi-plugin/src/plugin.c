@@ -64,6 +64,8 @@ NP_Initialize (NPNetscapeFuncs *bFuncs, NPPluginFuncs *pFuncs)
   pFuncs->getvalue = NPP_GetValue;
   pFuncs->setvalue = NPP_SetValue;
 
+  webapp_initialize_monitor ();
+
   return NPERR_NO_ERROR;
 }
 

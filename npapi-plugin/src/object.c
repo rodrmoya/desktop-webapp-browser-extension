@@ -33,7 +33,6 @@
 typedef struct {
   NPObject object;
   GHashTable *methods;
-  GFileMonitor *monitor;
 } WebappObjectWrapper;
 
 typedef NPVariant (*WebappMethod) (NPObject *object,
@@ -507,21 +506,26 @@ webapp_create_plugin_object (NPP instance)
 		       (gchar *) "uninstallChromeApp",
 		       uninstall_chrome_app_wrapper);
 
+  return object;
+}
+
+void
+webapp_initialize_monitor (void)
+{
+  GFileMonitor *monitor;
   /* Monitor ~/.local/share/applications */
   gchar *path = g_strdup_printf ("%s/.local/share/applications", g_get_home_dir ());
   GFile *file = g_file_new_for_path (path);
   g_free (path);
 
   GError *error = NULL;
-  wrapper->monitor = g_file_monitor_directory (file, 0, NULL, &error);
-  if (wrapper->monitor) {
-    g_signal_connect (wrapper->monitor, "changed", G_CALLBACK (on_directory_changed), wrapper);
+  monitor = g_file_monitor_directory (file, 0, NULL, &error);
+  if (monitor) {
+    g_signal_connect (monitor, "changed", G_CALLBACK (on_directory_changed), NULL);
   } else {
     g_error ("Error monitoring directory: %s\n", error->message);
     g_error_free (error);
   }
 
   g_object_unref (file);
-
-  return object;
 }

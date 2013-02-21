@@ -29,5 +29,6 @@
 #include "npapi-headers/headers/npruntime.h"
 
 NPObject *webapp_create_plugin_object (NPP instance);
+void      webapp_initialize_monitor (void);
 
 #endif
