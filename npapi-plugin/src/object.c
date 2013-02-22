@@ -513,19 +513,44 @@ void
 webapp_initialize_monitor (void)
 {
   GFileMonitor *monitor;
-  /* Monitor ~/.local/share/applications */
   gchar *path = g_strdup_printf ("%s/.local/share/applications", g_get_home_dir ());
   GFile *file = g_file_new_for_path (path);
-  g_free (path);
 
   GError *error = NULL;
   monitor = g_file_monitor_directory (file, 0, NULL, &error);
   if (monitor) {
+    GDir *dir;
+
+    /* Check already existing files on startup */
+    dir = g_dir_open (path, 0, &error);
+    if (dir) {
+      const gchar *name;
+
+      while (name = g_dir_read_name (dir)) {
+	if (g_str_has_prefix (name, "chrome-")) {
+	  gchar *full_path = g_strdup_printf ("%s/%s", path, name);
+	  GFile *file_to_check = g_file_new_for_path (full_path);
+
+	  on_directory_changed (monitor, file_to_check, NULL, G_FILE_MONITOR_EVENT_CREATED, NULL);
+
+	  g_free (full_path);
+	  g_object_unref (file_to_check);
+	}
+      }
+
+      g_dir_close (dir);
+    } else {
+      g_error ("Error opening directory %s: %s\n", path, error->message);
+      g_error_free (error);
+    }
+
+    /* Listen to changes in the ~/.local/share/applications directory */
     g_signal_connect (monitor, "changed", G_CALLBACK (on_directory_changed), NULL);
   } else {
     g_error ("Error monitoring directory: %s\n", error->message);
     g_error_free (error);
   }
 
+  g_free (path);
   g_object_unref (file);
 }
