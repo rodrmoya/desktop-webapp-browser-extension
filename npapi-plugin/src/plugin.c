@@ -126,6 +126,8 @@ NPP_Destroy (NPP instance, NPSavedData **save)
   if (G_UNLIKELY (instance == NULL || instance->pdata == NULL))
     return NPERR_NO_ERROR;
 
+  webapp_destroy_monitor ();
+
   TdBrowserPlugin *plugin = instance->pdata;
   g_free (plugin);
 

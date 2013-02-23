@@ -509,14 +509,20 @@ webapp_create_plugin_object (NPP instance)
   return object;
 }
 
+static GFileMonitor *monitor = NULL;
+
 void
 webapp_initialize_monitor (void)
 {
-  GFileMonitor *monitor;
   gchar *path = g_strdup_printf ("%s/.local/share/applications", g_get_home_dir ());
   GFile *file = g_file_new_for_path (path);
-
   GError *error = NULL;
+
+  g_debug ("%s called", G_STRFUNC);
+
+  if (monitor != NULL)
+    return;
+
   monitor = g_file_monitor_directory (file, 0, NULL, &error);
   if (monitor) {
     GDir *dir;
@@ -553,4 +559,16 @@ webapp_initialize_monitor (void)
 
   g_free (path);
   g_object_unref (file);
+}
+
+void
+webapp_destroy_monitor (void)
+{
+  g_debug ("%s called", G_STRFUNC);
+
+  if (monitor != NULL) {
+    g_object_unref (monitor);
+
+    monitor = NULL;
+  }
 }
