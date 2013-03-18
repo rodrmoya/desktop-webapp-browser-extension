@@ -63,6 +63,7 @@ NPClass_Deallocate (NPObject *npobj)
   WebappObjectWrapper *wrapper = (WebappObjectWrapper *) npobj;
 
   g_return_if_fail (wrapper != NULL);
+  g_hash_table_unref (wrapper->methods);
 
   g_free (wrapper);
 }
