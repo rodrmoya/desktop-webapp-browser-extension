@@ -14,7 +14,9 @@ libdesktopwebapp_npapi_plugin_la_SOURCES = \
 	object.c \
 	object.h \
 	plugin.c \
-	plugin.h
+	plugin.h \
+	webapp-monitor.c \
+	webapp-monitor.h
 
 libdesktopwebapp_npapi_plugin_la_LDFLAGS = \
         -avoid-version \

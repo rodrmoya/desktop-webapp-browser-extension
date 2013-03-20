@@ -22,12 +22,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DESKTOP_WEBAPP_OBJECT_H
-#define DESKTOP_WEBAPP_OBJECT_H
+#ifndef WEBAPP_MONITOR_H
 
 #include "npapi-headers/headers/npapi.h"
 #include "npapi-headers/headers/npruntime.h"
 
-NPObject *webapp_create_plugin_object (NPP instance);
+void      webapp_initialize_monitor (NPP instance);
+void      webapp_monitor_set_icon_loader_callback (NPObject *callback);
+void      webapp_destroy_monitor (void);
 
 #endif

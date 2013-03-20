@@ -1,6 +1,33 @@
 
 var plugin = document.getElementById ("desktop-webapp-plugin");
 
+plugin.setIconLoaderCallback (function (url) {
+    chrome.windows.getAll({populate : true}, function (window_list) {
+	var found = false;
+
+        for (var i = 0; i < window_list.length && !found; i++) {
+	    var this_window = window_list[i];
+	    var tabs = this_window.tabs;
+
+	    for (var j = 0; j < tabs.length; j++) {
+		if (tabs[j].url == url) {
+		    chrome.tabs.update (tabs[j].id, { active: true }, function (tab) {
+			chrome.tabs.captureVisibleTab (this_window.id, { format: "png" }, function (data_url) {
+			    console.log (data_url);
+			    plugin.setIconForURL (url, data_url);
+			});
+		    });
+
+		    found = true;
+		    break;
+		}
+	    }
+	}
+    });
+
+    return 0;
+});
+
 function getIconUrl (info)
 {
     if (!info.icons || info.icons.length == 0) {

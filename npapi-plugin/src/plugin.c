@@ -26,6 +26,7 @@
 
 #include "object.h"
 #include "plugin.h"
+#include "webapp-monitor.h"
 #include <glib.h>
 
 #define PLUGIN_NAME        "Desktop Webapp plugin"
@@ -63,8 +64,6 @@ NP_Initialize (NPNetscapeFuncs *bFuncs, NPPluginFuncs *pFuncs)
   pFuncs->urlnotify = NPP_URLNotify;
   pFuncs->getvalue = NPP_GetValue;
   pFuncs->setvalue = NPP_SetValue;
-
-  webapp_initialize_monitor ();
 
   return NPERR_NO_ERROR;
 }
@@ -115,6 +114,9 @@ NPP_New (NPMIMEType pluginType, NPP instance, uint16_t mode,
   TdBrowserPlugin *plugin = g_new0 (TdBrowserPlugin, 1);
   plugin->instance = instance;
   instance->pdata = plugin;
+
+  webapp_initialize_monitor (instance);
+
   return NPERR_NO_ERROR;
 }
 

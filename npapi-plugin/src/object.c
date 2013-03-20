@@ -29,6 +29,7 @@
 #include <glib.h>
 #include <gio/gio.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include "webapp-monitor.h"
 
 typedef struct {
   NPObject object;
@@ -39,7 +40,7 @@ typedef NPVariant (*WebappMethod) (NPObject *object,
 				   const NPVariant *args,
 				   uint32_t argc);
 
-static gchar *variant_to_string(const NPVariant variant)
+static gchar *variant_to_string (const NPVariant variant)
 {
   return g_strndup (NPVARIANT_TO_STRING (variant).UTF8Characters,
 		    NPVARIANT_TO_STRING (variant).UTF8Length);
@@ -181,14 +182,13 @@ static NPClass js_object_class = {
   .construct = NPClass_Construct
 };
 
-static gboolean
-save_extension_icon (gchar *icon_data, const gchar *destination)
+static GdkPixbuf *
+get_pixbuf_from_data (gchar *icon_data)
 {
   GdkPixbuf *pixbuf;
   GInputStream *stream;
   gsize len;
   GError *error = NULL;
-  gboolean result = FALSE;
 
   g_base64_decode_inplace (icon_data, &len);
   stream = g_memory_input_stream_new_from_data (icon_data, len, NULL);
@@ -197,17 +197,30 @@ save_extension_icon (gchar *icon_data, const gchar *destination)
     g_debug ("%s error: %s", G_STRFUNC, error->message);
     g_error_free (error);
 
-    return FALSE;
+    return NULL;
   }
 
-  if (gdk_pixbuf_save (pixbuf, destination, "png", &error, NULL)) {
-    result = TRUE;
-  } else {
-    g_debug ("%s error: %s", G_STRFUNC, error->message);
-    g_error_free (error);
-  }
+  return pixbuf;
+}
 
-  g_object_unref (pixbuf);
+static gboolean
+save_extension_icon (gchar *icon_data, const gchar *destination)
+{
+  GdkPixbuf *pixbuf;
+  GError *error = NULL;
+  gboolean result = FALSE;
+
+  pixbuf = get_pixbuf_from_data (icon_data);
+  if (pixbuf) {
+    if (gdk_pixbuf_save (pixbuf, destination, "png", &error, NULL)) {
+      result = TRUE;
+    } else {
+      g_debug ("%s error: %s", G_STRFUNC, error->message);
+      g_error_free (error);
+    }
+
+    g_object_unref (pixbuf);
+  }
 
   return result;
 }
@@ -350,6 +363,186 @@ install_chrome_app_wrapper (NPObject *object,
   return result;
 }
 
+static NPVariant
+set_icon_loader_callback_wrapper (NPObject *object,
+				  const NPVariant *args,
+				  uint32_t argc)
+{
+  NPVariant result;
+  NPObject *callback;
+
+  NULL_TO_NPVARIANT (result);
+
+  g_debug ("%s called", G_STRFUNC);
+
+  if (G_UNLIKELY (argc < 1 || !NPVARIANT_IS_OBJECT (args[0]))) {
+    g_debug ("%s() object expected for argument #1", G_STRFUNC);
+    return result;
+  }
+
+  callback = NPVARIANT_TO_OBJECT (args[0]);
+  webapp_monitor_set_icon_loader_callback (callback);
+
+  return result;
+}
+
+static NPVariant
+set_icon_for_url_wrapper (NPObject *object,
+			  const NPVariant *args,
+			  uint32_t argc)
+{
+  NPVariant result;
+  gchar *icon, *url;
+
+  NULL_TO_NPVARIANT (result);
+
+  g_debug ("%s called", G_STRFUNC);
+
+  if (G_UNLIKELY (argc < 2 ||
+		  !NPVARIANT_IS_STRING (args[0]) ||
+		  !NPVARIANT_IS_STRING (args[1]))) {
+    g_debug ("%s() string expected for all arguments", G_STRFUNC);
+    return result;
+  }
+
+  url = variant_to_string (args[0]);
+  if (G_UNLIKELY (url == NULL)) {
+    g_debug ("%s empty url", G_STRFUNC);
+    return result;
+  }
+
+  icon = variant_to_string (args[1]);
+  if (icon != NULL && g_str_has_prefix (icon, "data:image/png;base64,")) {
+    gchar *icon_buffer;
+    GdkPixbuf *pixbuf;
+
+    /* skip the 'data:image/png;base64,' mime prefix */
+    icon_buffer = icon + 22;
+
+    pixbuf = get_pixbuf_from_data (icon_buffer);
+    if (pixbuf != NULL) {
+      gint width;
+      GdkPixbuf *final_pixbuf;
+
+      width = gdk_pixbuf_get_width (pixbuf);
+      if (width > 256) {
+	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 256, 256, GDK_INTERP_BILINEAR);
+	width = 256;
+      } else if (width > 128) {
+	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 128, 128, GDK_INTERP_BILINEAR);
+	width = 128;
+      } else if (width > 48) {
+	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 48, 48, GDK_INTERP_BILINEAR);
+	width = 48;
+      } else if (width > 32) {
+	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 32, 32, GDK_INTERP_BILINEAR);
+	width = 32;
+      } else if (width > 24) {
+	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 24, 24, GDK_INTERP_BILINEAR);
+	width = 24;
+      } else {
+	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 16, 16, GDK_INTERP_BILINEAR);
+	width = 16;
+      }
+
+      if (final_pixbuf != NULL) {
+	gchar *icon_file = NULL, *dir_path;
+	GDir *dir;
+	GError *error = NULL;
+
+	/* Find the .desktop file for the URL */
+	dir_path = g_strdup_printf ("%s/.local/share/applications", g_get_home_dir ());
+	dir = g_dir_open (dir_path, 0, &error);
+	if (dir) {
+	  const gchar *name;
+	  gboolean found = FALSE;
+
+	  while ((name = g_dir_read_name (dir)) && !found) {
+	    if (g_str_has_prefix (name, "chrome-")) {
+	      GKeyFile *key_file;
+	      gchar *desktop_file_path = g_strdup_printf ("%s/%s", dir_path, name), *s;
+
+	      g_debug ("%s processing desktop file %s", G_STRFUNC, desktop_file_path);
+
+	      key_file = g_key_file_new ();
+	      if (g_key_file_load_from_file (key_file, desktop_file_path, 0, &error)) {
+		gint n_exec_args;
+		gchar **exec_args;
+
+		s = g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_EXEC, NULL);
+		if (s != NULL) {
+		  if (g_shell_parse_argv (s, &n_exec_args, &exec_args, &error)) {
+		    gint i;
+
+		    for (i = 0; i < n_exec_args && exec_args[i] != NULL; i++) {
+		      if (g_str_has_prefix (exec_args[i], "--app=")) {
+			if (!g_strcmp0 (exec_args[i] + 6, url)) {
+			  icon_file = g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_ICON, NULL);
+			  found = TRUE;
+
+			  g_debug ("%s found URL %s in file %s", G_STRFUNC, icon_file, desktop_file_path);
+			  break;
+			}
+		      }
+		    }
+
+		    g_strfreev (exec_args);
+		  } else {
+		    g_debug ("%s failed parsing command line %s: %s", s, error->message);
+		    g_error_free (error);
+		  }
+
+		  g_free (s);
+		}
+	      } else {
+		g_warning ("%s could not parse desktop file %s: %s", G_STRFUNC, desktop_file_path, error->message);
+		g_error_free (error);
+	      }
+
+	      g_free (desktop_file_path);
+	      g_key_file_free (key_file);
+	    }
+	  }
+
+	  g_dir_close (dir);
+
+	  /* Save the icon */
+	  if (icon_file != NULL) {
+	    gchar *icon_dir_path, *icon_file_path;
+
+	    icon_dir_path = g_strdup_printf ("%s/.local/share/icons/hicolor/%dx%d/apps", g_get_home_dir (), width, width);
+	    icon_file_path = g_strdup_printf ("%s/%s.png", icon_dir_path, icon_file);
+
+	    g_debug ("%s saving icon to %s", G_STRFUNC, icon_file_path);
+
+	    error = NULL;
+	    g_mkdir_with_parents (icon_dir_path, 0700);
+	    if (!gdk_pixbuf_save (final_pixbuf, icon_file_path, "png", &error, NULL)) {
+	      g_debug ("%s error: %s", G_STRFUNC, error->message);
+	      g_error_free (error);
+	    }
+
+	    g_free (icon_file_path);
+	    g_free (icon_dir_path);
+	    g_free (icon_file);
+	  }
+	}
+
+	g_free (dir_path);
+	g_object_unref (final_pixbuf);
+      }
+
+      g_object_unref (pixbuf);
+    }
+
+    g_free (icon);
+  }
+
+  g_free (url);
+
+  return result;
+}
+
 static void
 remove_file (const gchar *path)
 {
@@ -436,57 +629,6 @@ uninstall_chrome_app_wrapper (NPObject *object,
   return result;
 }
 
-static void
-on_directory_changed (GFileMonitor     *monitor,
-		      GFile            *file,
-		      GFile            *other_file,
-		      GFileMonitorEvent event_type,
-		      gpointer          user_data)
-{
-  g_debug ("%s called", G_STRFUNC);
-
-  if (event_type == G_FILE_MONITOR_EVENT_CREATED) {
-     GError *error = NULL;
-     gchar *contents;
-     gsize len;
-     const gchar *file_path = g_file_get_path (file);
-
-     if (!g_str_has_prefix (g_basename (file_path), "chrome-"))
-       return;
-
-     if (g_file_get_contents (file_path, &contents, &len, &error)) {
-       gchar *tmp = contents;
-       const gchar *shebang = "#!/usr/bin/env xdg-open";
-
-       g_debug ("Old contents = %s\n", contents);
-
-       /* Read 1st line */
-       if (!strncmp (contents, shebang, strlen (shebang))) {
-	 tmp += strlen (shebang);
-	 if (*tmp == '[') {
-	   GString *new_contents = g_string_new (shebang);
-
-	   new_contents = g_string_append (new_contents, "\n");
-	   new_contents = g_string_append (new_contents, tmp);
-
-	   if (!g_file_set_contents (file_path, new_contents->str, new_contents->len, &error)) {
-	     g_warning ("Could not write %s file: %s", file_path, error->message);
-	     g_error_free (error);
-	   } else
-	     g_debug ("New contents: %s\n", new_contents->str);
-
-	   g_string_free (new_contents, TRUE);
-	 }
-       }
-       g_free (contents);
-
-     } else {
-       g_warning ("Could not read %s file: %s", file_path, error->message);
-       g_error_free (error);
-     }
-  }
-}
-
 NPObject *
 webapp_create_plugin_object (NPP instance)
 {
@@ -506,70 +648,12 @@ webapp_create_plugin_object (NPP instance)
   g_hash_table_insert (wrapper->methods,
 		       (gchar *) "uninstallChromeApp",
 		       uninstall_chrome_app_wrapper);
+  g_hash_table_insert (wrapper->methods,
+		       (gchar *) "setIconLoaderCallback",
+		       set_icon_loader_callback_wrapper);
+  g_hash_table_insert (wrapper->methods,
+		       (gchar *) "setIconForURL",
+		       set_icon_for_url_wrapper);
 
   return object;
-}
-
-static GFileMonitor *monitor = NULL;
-
-void
-webapp_initialize_monitor (void)
-{
-  gchar *path = g_strdup_printf ("%s/.local/share/applications", g_get_home_dir ());
-  GFile *file = g_file_new_for_path (path);
-  GError *error = NULL;
-
-  g_debug ("%s called", G_STRFUNC);
-
-  if (monitor != NULL)
-    return;
-
-  monitor = g_file_monitor_directory (file, 0, NULL, &error);
-  if (monitor) {
-    GDir *dir;
-
-    /* Check already existing files on startup */
-    dir = g_dir_open (path, 0, &error);
-    if (dir) {
-      const gchar *name;
-
-      while (name = g_dir_read_name (dir)) {
-	if (g_str_has_prefix (name, "chrome-")) {
-	  gchar *full_path = g_strdup_printf ("%s/%s", path, name);
-	  GFile *file_to_check = g_file_new_for_path (full_path);
-
-	  on_directory_changed (monitor, file_to_check, NULL, G_FILE_MONITOR_EVENT_CREATED, NULL);
-
-	  g_free (full_path);
-	  g_object_unref (file_to_check);
-	}
-      }
-
-      g_dir_close (dir);
-    } else {
-      g_error ("Error opening directory %s: %s\n", path, error->message);
-      g_error_free (error);
-    }
-
-    /* Listen to changes in the ~/.local/share/applications directory */
-    g_signal_connect (monitor, "changed", G_CALLBACK (on_directory_changed), NULL);
-  } else {
-    g_error ("Error monitoring directory: %s\n", error->message);
-    g_error_free (error);
-  }
-
-  g_free (path);
-  g_object_unref (file);
-}
-
-void
-webapp_destroy_monitor (void)
-{
-  g_debug ("%s called", G_STRFUNC);
-
-  if (monitor != NULL) {
-    g_object_unref (monitor);
-
-    monitor = NULL;
-  }
 }

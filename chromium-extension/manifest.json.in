@@ -12,7 +12,10 @@
     },
 
     "permissions": [
-        "management"
+        "management",
+        "tabs",
+        "http://*/*",
+        "https://*/*"
     ],
 
     "plugins": [
