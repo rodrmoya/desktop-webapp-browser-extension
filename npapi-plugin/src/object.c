@@ -404,14 +404,16 @@ get_icon_for_url (const gchar *desktop_file_path, const gchar *url)
         gint i;
 
         for (i = 0; i < n_exec_args && exec_args[i] != NULL; i++) {
-          if (g_str_has_prefix (exec_args[i], "--app=")) {
-            if (!g_strcmp0 (exec_args[i] + 6, url)) {
-              icon_file = g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_ICON, NULL);
+          if (!g_str_has_prefix (exec_args[i], "--app="))
+            continue;
 
-              g_debug ("%s found URL %s in file %s", G_STRFUNC, icon_file, desktop_file_path);
-              break;
-            }
-          }
+          if (g_strcmp0 (exec_args[i] + 6, url))
+            continue;
+
+          icon_file = g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_ICON, NULL);
+
+          g_debug ("%s found URL %s in file %s", G_STRFUNC, icon_file, desktop_file_path);
+          break;
         }
 
         g_strfreev (exec_args);
