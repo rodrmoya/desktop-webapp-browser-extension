@@ -376,7 +376,7 @@ set_icon_loader_callback_wrapper (NPObject *object,
   g_debug ("%s called", G_STRFUNC);
 
   if (G_UNLIKELY (argc < 1 || !NPVARIANT_IS_OBJECT (args[0]))) {
-    g_debug ("%s() object expected for argument #1", G_STRFUNC);
+    g_debug ("%s() function callback expected for argument #1", G_STRFUNC);
     return result;
   }
 
