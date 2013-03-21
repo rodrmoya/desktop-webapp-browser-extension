@@ -14,8 +14,7 @@
     "permissions": [
         "management",
         "tabs",
-        "http://*/*",
-        "https://*/*"
+	"<all_urls>"
     ],
 
     "plugins": [
