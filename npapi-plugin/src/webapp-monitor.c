@@ -154,7 +154,7 @@ on_directory_changed (GFileMonitor     *file_monitor,
        g_debug ("Old contents = %s\n", contents);
 
        /* Read 1st line */
-       if (!strncmp (contents, shebang, strlen (shebang))) {
+       if (g_str_has_prefix (contents, shebang)) {
 	 tmp += strlen (shebang);
 	 if (*tmp == '[') {
 	   GString *new_contents = g_string_new (shebang);
@@ -265,8 +265,6 @@ webapp_destroy_monitor (void)
   g_debug ("%s called", G_STRFUNC);
 
   if (the_monitor != NULL) {
-    g_object_unref (the_monitor);
-
-    the_monitor = NULL;
+    g_clear_object (&the_monitor);
   }
 }
