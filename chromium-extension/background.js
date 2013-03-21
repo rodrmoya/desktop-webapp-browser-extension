@@ -3,8 +3,6 @@ var plugin = document.getElementById ("desktop-webapp-plugin");
 
 plugin.setIconLoaderCallback (function (url) {
     chrome.windows.getAll({populate : true}, function (window_list) {
-	var found = false;
-
         for (var i = 0; i < window_list.length && !found; i++) {
 	    var this_window = window_list[i];
 	    var tabs = this_window.tabs;
@@ -18,14 +16,11 @@ plugin.setIconLoaderCallback (function (url) {
 			});
 		    });
 
-		    found = true;
-		    break;
+		    return;
 		}
 	    }
 	}
     });
-
-    return 0;
 });
 
 function getIconUrl (info)
