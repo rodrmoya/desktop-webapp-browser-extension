@@ -421,29 +421,24 @@ set_icon_for_url_wrapper (NPObject *object,
 
     pixbuf = get_pixbuf_from_data (icon_buffer);
     if (pixbuf != NULL) {
-      gint width;
+      gint width, size;
       GdkPixbuf *final_pixbuf;
 
       width = gdk_pixbuf_get_width (pixbuf);
-      if (width > 256) {
-	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 256, 256, GDK_INTERP_BILINEAR);
-	width = 256;
-      } else if (width > 128) {
-	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 128, 128, GDK_INTERP_BILINEAR);
-	width = 128;
-      } else if (width > 48) {
-	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 48, 48, GDK_INTERP_BILINEAR);
-	width = 48;
-      } else if (width > 32) {
-	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 32, 32, GDK_INTERP_BILINEAR);
-	width = 32;
-      } else if (width > 24) {
-	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 24, 24, GDK_INTERP_BILINEAR);
-	width = 24;
-      } else {
-	final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, 16, 16, GDK_INTERP_BILINEAR);
-	width = 16;
-      }
+      if (width >= 256)
+	size = 256;
+      else if (width >= 128)
+	size = 128;
+      else if (width >= 48)
+	size = 48;
+      else if (width >= 32)
+	size = 32;
+      else if (width >= 24)
+	size = 24;
+      else
+	size = 16;
+
+      final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, size, size, GDK_INTERP_BILINEAR);
 
       if (final_pixbuf != NULL) {
 	gchar *icon_file = NULL, *dir_path;
@@ -510,7 +505,7 @@ set_icon_for_url_wrapper (NPObject *object,
 	  if (icon_file != NULL) {
 	    gchar *icon_dir_path, *icon_file_path;
 
-	    icon_dir_path = g_strdup_printf ("%s/.local/share/icons/hicolor/%dx%d/apps", g_get_home_dir (), width, width);
+	    icon_dir_path = g_strdup_printf ("%s/.local/share/icons/hicolor/%dx%d/apps", g_get_home_dir (), size, size);
 	    icon_file_path = g_strdup_printf ("%s/%s.png", icon_dir_path, icon_file);
 
 	    g_debug ("%s saving icon to %s", G_STRFUNC, icon_file_path);
