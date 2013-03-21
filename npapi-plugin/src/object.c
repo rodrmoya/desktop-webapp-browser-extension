@@ -37,8 +37,8 @@ typedef struct {
 } WebappObjectWrapper;
 
 typedef NPVariant (*WebappMethod) (NPObject *object,
-				   const NPVariant *args,
-				   uint32_t argc);
+                                   const NPVariant *args,
+                                   uint32_t argc);
 
 static gchar *variant_to_string (const NPVariant variant)
 {
@@ -308,10 +308,10 @@ install_chrome_app_wrapper (NPObject *object,
       icon_file_path = g_strdup_printf ("%s/.local/share/icons/%s.png", g_get_home_dir (), icon_file);
 
       if (save_extension_icon (icon_buffer, icon_file_path))
-	g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_ICON, icon_file);
+        g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_ICON, icon_file);
       else {
-	g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_ICON, "chromium-browser.png");
-	g_debug ("%s failed saving %s file", G_STRFUNC, icon_file_path);
+        g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_ICON, "chromium-browser.png");
+        g_debug ("%s failed saving %s file", G_STRFUNC, icon_file_path);
       }
 
       g_free (icon_file_path);
@@ -386,6 +386,50 @@ set_icon_loader_callback_wrapper (NPObject *object,
   return result;
 }
 
+static gchar *
+get_icon_for_url (const gchar *desktop_file_path, const gchar *url)
+{
+  GKeyFile *key_file;
+  gchar *s, *icon_file = NULL;
+  GError *error = NULL;
+
+  key_file = g_key_file_new ();
+  if (g_key_file_load_from_file (key_file, desktop_file_path, 0, &error)) {
+    gint n_exec_args;
+    gchar **exec_args, *s;
+
+    s = g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_EXEC, NULL);
+    if (s != NULL) {
+      if (g_shell_parse_argv (s, &n_exec_args, &exec_args, &error)) {
+        gint i;
+
+        for (i = 0; i < n_exec_args && exec_args[i] != NULL; i++) {
+          if (g_str_has_prefix (exec_args[i], "--app=")) {
+            if (!g_strcmp0 (exec_args[i] + 6, url)) {
+              icon_file = g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_ICON, NULL);
+
+              g_debug ("%s found URL %s in file %s", G_STRFUNC, icon_file, desktop_file_path);
+              break;
+            }
+          }
+        }
+
+        g_strfreev (exec_args);
+      } else {
+        g_debug ("%s failed parsing command line %s: %s", s, error->message);
+        g_error_free (error);
+      }
+
+      g_free (s);
+    }
+  } else {
+    g_warning ("%s could not parse desktop file %s: %s", G_STRFUNC, desktop_file_path, error->message);
+    g_error_free (error);
+  }
+
+  return icon_file;
+}
+
 static NPVariant
 set_icon_for_url_wrapper (NPObject *object,
 			  const NPVariant *args,
@@ -426,105 +470,71 @@ set_icon_for_url_wrapper (NPObject *object,
 
       width = gdk_pixbuf_get_width (pixbuf);
       if (width >= 256)
-	size = 256;
+        size = 256;
       else if (width >= 128)
-	size = 128;
+        size = 128;
       else if (width >= 48)
-	size = 48;
+        size = 48;
       else if (width >= 32)
-	size = 32;
+        size = 32;
       else if (width >= 24)
-	size = 24;
+        size = 24;
       else
-	size = 16;
+        size = 16;
 
       final_pixbuf = gdk_pixbuf_scale_simple (pixbuf, size, size, GDK_INTERP_BILINEAR);
-
       if (final_pixbuf != NULL) {
-	gchar *icon_file = NULL, *dir_path;
-	GDir *dir;
-	GError *error = NULL;
+        gchar *icon_file = NULL, *dir_path;
+        GDir *dir;
+        GError *error = NULL;
 
-	/* Find the .desktop file for the URL */
-	dir_path = g_strdup_printf ("%s/.local/share/applications", g_get_home_dir ());
-	dir = g_dir_open (dir_path, 0, &error);
-	if (dir) {
-	  const gchar *name;
-	  gboolean found = FALSE;
+        /* Find the .desktop file for the URL */
+        dir_path = g_strdup_printf ("%s/.local/share/applications", g_get_home_dir ());
+        dir = g_dir_open (dir_path, 0, &error);
+        if (dir) {
+          const gchar *name;
 
-	  while ((name = g_dir_read_name (dir)) && !found) {
-	    if (g_str_has_prefix (name, "chrome-")) {
-	      GKeyFile *key_file;
-	      gchar *desktop_file_path = g_strdup_printf ("%s/%s", dir_path, name), *s;
+          while ((name = g_dir_read_name (dir)) && !icon_file) {
+            gchar *desktop_file_path;
 
-	      g_debug ("%s processing desktop file %s", G_STRFUNC, desktop_file_path);
+            if (!g_str_has_prefix (name, "chrome-"))
+              continue;
 
-	      key_file = g_key_file_new ();
-	      if (g_key_file_load_from_file (key_file, desktop_file_path, 0, &error)) {
-		gint n_exec_args;
-		gchar **exec_args;
+            desktop_file_path = g_strdup_printf ("%s/%s", dir_path, name);
 
-		s = g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_EXEC, NULL);
-		if (s != NULL) {
-		  if (g_shell_parse_argv (s, &n_exec_args, &exec_args, &error)) {
-		    gint i;
+            g_debug ("%s processing desktop file %s", G_STRFUNC, desktop_file_path);
 
-		    for (i = 0; i < n_exec_args && exec_args[i] != NULL; i++) {
-		      if (g_str_has_prefix (exec_args[i], "--app=")) {
-			if (!g_strcmp0 (exec_args[i] + 6, url)) {
-			  icon_file = g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_ICON, NULL);
-			  found = TRUE;
+            icon_file = get_icon_for_url (desktop_file_path, url);
 
-			  g_debug ("%s found URL %s in file %s", G_STRFUNC, icon_file, desktop_file_path);
-			  break;
-			}
-		      }
-		    }
+            g_free (desktop_file_path);
+          }
 
-		    g_strfreev (exec_args);
-		  } else {
-		    g_debug ("%s failed parsing command line %s: %s", s, error->message);
-		    g_error_free (error);
-		  }
+          g_dir_close (dir);
 
-		  g_free (s);
-		}
-	      } else {
-		g_warning ("%s could not parse desktop file %s: %s", G_STRFUNC, desktop_file_path, error->message);
-		g_error_free (error);
-	      }
+          /* Save the icon */
+          if (icon_file != NULL) {
+            gchar *icon_dir_path, *icon_file_path;
 
-	      g_free (desktop_file_path);
-	      g_key_file_free (key_file);
-	    }
-	  }
+            icon_dir_path = g_strdup_printf ("%s/.local/share/icons/hicolor/%dx%d/apps", g_get_home_dir (), size, size);
+            icon_file_path = g_strdup_printf ("%s/%s.png", icon_dir_path, icon_file);
 
-	  g_dir_close (dir);
+            g_debug ("%s saving icon to %s", G_STRFUNC, icon_file_path);
 
-	  /* Save the icon */
-	  if (icon_file != NULL) {
-	    gchar *icon_dir_path, *icon_file_path;
+            error = NULL;
+            g_mkdir_with_parents (icon_dir_path, 0700);
+            if (!gdk_pixbuf_save (final_pixbuf, icon_file_path, "png", &error, NULL)) {
+              g_debug ("%s error: %s", G_STRFUNC, error->message);
+              g_error_free (error);
+            }
 
-	    icon_dir_path = g_strdup_printf ("%s/.local/share/icons/hicolor/%dx%d/apps", g_get_home_dir (), size, size);
-	    icon_file_path = g_strdup_printf ("%s/%s.png", icon_dir_path, icon_file);
+            g_free (icon_file_path);
+            g_free (icon_dir_path);
+            g_free (icon_file);
+          }
+        }
 
-	    g_debug ("%s saving icon to %s", G_STRFUNC, icon_file_path);
-
-	    error = NULL;
-	    g_mkdir_with_parents (icon_dir_path, 0700);
-	    if (!gdk_pixbuf_save (final_pixbuf, icon_file_path, "png", &error, NULL)) {
-	      g_debug ("%s error: %s", G_STRFUNC, error->message);
-	      g_error_free (error);
-	    }
-
-	    g_free (icon_file_path);
-	    g_free (icon_dir_path);
-	    g_free (icon_file);
-	  }
-	}
-
-	g_free (dir_path);
-	g_object_unref (final_pixbuf);
+        g_free (dir_path);
+        g_object_unref (final_pixbuf);
       }
 
       g_object_unref (pixbuf);
