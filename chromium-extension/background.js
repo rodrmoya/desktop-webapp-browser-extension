@@ -3,7 +3,7 @@ var plugin = document.getElementById ("desktop-webapp-plugin");
 
 plugin.setIconLoaderCallback (function (url) {
     chrome.windows.getAll({populate : true}, function (window_list) {
-        for (var i = 0; i < window_list.length && !found; i++) {
+        for (var i = 0; i < window_list.length; i++) {
 	    var this_window = window_list[i];
 	    var tabs = this_window.tabs;
 
