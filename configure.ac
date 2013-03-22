@@ -1,7 +1,7 @@
 AC_PREREQ([2.63])
 
 AC_INIT([desktop-webapp-browser-extension],
-        [0.1],
+        [0.3.0],
 	[https://github.com/rodrmoya/desktop-webapp-browser-extension],
 	[desktop-webapp-browser-extension],
 	[https://github.com/rodrmoya/desktop-webapp-browser-extension])
@@ -35,9 +35,10 @@ AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE,"$GETTEXT_PACKAGE", [GETTEXT package name])
 
 
 PKG_CHECK_MODULES(DESKTOPWEBAPP_NPAPI_PLUGIN,
-		  glib-2.0
-		  gio-2.0
+                  glib-2.0
+                  gio-2.0
                   gdk-pixbuf-2.0
+                  gtk+-3.0
 		  )
 GLIB_GSETTINGS
 

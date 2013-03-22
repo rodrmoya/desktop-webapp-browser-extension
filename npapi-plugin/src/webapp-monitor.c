@@ -25,6 +25,7 @@
 #include <string.h>
 #include <glib.h>
 #include <gio/gio.h>
+#include <gtk/gtk.h>
 #include "webapp-monitor.h"
 
 typedef struct {
@@ -69,6 +70,52 @@ webapp_monitor_class_init (WebappMonitorClass *klass)
   object_class->finalize = webapp_monitor_finalize;
 }
 
+static gint
+get_icon_size (GKeyFile *key_file)
+{
+  gchar *icon;
+  gint icon_size = 0;
+
+  icon = g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_ICON, NULL);
+  if (!icon)
+    return 0;
+
+  if (g_path_is_absolute (icon)) {
+    GdkPixbuf *pixbuf;
+    gint width, height;
+    GError *error = NULL;
+
+    pixbuf = gdk_pixbuf_new_from_file (icon, &error);
+    width = gdk_pixbuf_get_width (pixbuf);
+    height = gdk_pixbuf_get_height (pixbuf);
+
+    g_object_unref (pixbuf);
+
+    icon_size = MIN (width, height);
+  } else {
+    gint *sizes, i;
+    GtkIconTheme *icon_theme = gtk_icon_theme_get_default ();
+
+    sizes = gtk_icon_theme_get_icon_sizes (icon_theme, icon);
+    if (sizes != NULL) {
+      for (i = 0; sizes != NULL && sizes[i] != 0; i++) {
+        g_debug ("size %d found for icon %s", sizes[i], icon);
+        if (sizes[i] == -1) { /* Scalable */
+          icon_size = 256;
+          break;
+        } else if (sizes[i] > icon_size)
+          icon_size = sizes[i];
+      }
+
+      g_free (sizes);
+    }
+  }
+
+  g_free (icon);
+
+  return icon_size;
+}
+
 static void
 retrieve_highres_icon (WebappMonitor *monitor, const gchar *desktop_file)
 {
@@ -84,6 +131,9 @@ retrieve_highres_icon (WebappMonitor *monitor, const gchar *desktop_file)
 
     goto out;
   }
+
+  if (get_icon_size (key_file) >= 64)
+    goto out;
 
   s =  g_key_file_get_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_EXEC, NULL);
   if (s != NULL) {
