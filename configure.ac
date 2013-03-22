@@ -39,7 +39,7 @@ PKG_CHECK_MODULES(DESKTOPWEBAPP_NPAPI_PLUGIN,
                   gio-2.0
                   gdk-pixbuf-2.0
                   gtk+-3.0
-		  )
+                  )
 GLIB_GSETTINGS
 
 
