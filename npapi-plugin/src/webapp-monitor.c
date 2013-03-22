@@ -103,8 +103,9 @@ get_icon_size (GKeyFile *key_file)
         if (sizes[i] == -1) { /* Scalable */
           icon_size = 256;
           break;
-        } else if (sizes[i] > icon_size)
-          icon_size = sizes[i];
+        }
+
+        icon_size = MAX (icon_size, sizes[i]);
       }
 
       g_free (sizes);
