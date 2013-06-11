@@ -225,6 +225,24 @@ save_extension_icon (gchar *icon_data, const gchar *destination)
   return result;
 }
 
+static gchar *
+get_desktop_file_path (const gchar *app_id,
+		       gchar **desktop_file_out)
+{
+  gchar *desktop_file = NULL;
+  gchar *desktop_file_path = NULL;
+
+  desktop_file = g_strdup_printf ("chrome-%s-Default.desktop", app_id);
+  desktop_file_path = g_strdup_printf ("%s/.local/share/applications/%s", g_get_home_dir (), desktop_file);
+
+  if (desktop_file_out != NULL)
+    *desktop_file_out = desktop_file;
+  else
+    g_free (desktop_file);
+
+  return desktop_file_path;
+}
+
 static NPVariant
 install_chrome_app_wrapper (NPObject *object,
 			    const NPVariant *args,
@@ -267,8 +285,7 @@ install_chrome_app_wrapper (NPObject *object,
   }
 
   /* Create .desktop file in ~/.local/share/applications */
-  desktop_file = g_strdup_printf ("chrome-%s-Default.desktop", app_id);
-  desktop_file_path = g_strdup_printf ("%s/.local/share/applications/%s", g_get_home_dir (), desktop_file);
+  desktop_file_path = get_desktop_file_path (app_id, &desktop_file);
   if (desktop_file_path != NULL) {
     GKeyFile *key_file = g_key_file_new ();
     gchar *exec, *contents;
@@ -585,8 +602,7 @@ uninstall_chrome_app_wrapper (NPObject *object,
   }
 
   /* Remove the .desktop file in ~/.local/share/applications */
-  desktop_file = g_strdup_printf ("chrome-%s-Default.desktop", app_id);
-  file_path = g_strdup_printf ("%s/.local/share/applications/%s", g_get_home_dir (), desktop_file);
+  file_path = get_desktop_file_path (app_id, &desktop_file);
   if (file_path != NULL) {
     GSettings *settings;
     gchar **favorite_apps;
