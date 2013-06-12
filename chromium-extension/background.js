@@ -58,7 +58,10 @@ function getImageDataURL(url, callback) {
 /* Register event listeners for apps/extensions events */
 chrome.management.onInstalled.addListener (function(info) {
     if (info.isApp) {
-        console.log ("Installing Chrome app");
+        /* This could be a proper installation or just an
+         * update */
+        console.log ("Installing Chrome app " + info.id +
+            "(" + info.name + ")");
         var icon_url = getIconUrl(info);
         getImageDataURL(icon_url, function(result){
             /* Call NPAPI plugin */
@@ -73,6 +76,18 @@ chrome.management.onInstalled.addListener (function(info) {
 });
 
 chrome.management.onUninstalled.addListener (function(id) {
-    console.log ("Uninstalling Chrome app");
+    console.log ("Uninstalling Chrome app " + id);
     plugin.uninstallChromeApp (id);
+});
+
+chrome.management.getAll (function (all_apps) {
+    for (var i = 0; i < all_apps.length; i++) {
+        var info = all_apps[i];
+        /* If this app doesn't already have a desktop file it will
+         * be ignored. Doing so means we can ignore pre-installed
+         * apps */
+        console.log("Potentially ignoring app " + info.id +
+            "(" + info.name + ")");
+        plugin.ignoreChromeApp (info.id);
+    }
 });
