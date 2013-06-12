@@ -26,3 +26,10 @@ missing
 po/stamp-it
 po/POTFILES
 stamp-h1
+
+/chromium-extension/chromium-extension.crx
+/chromium-extension/desktop-webapp-extension.json
+/chromium-extension/libdesktopwebapp_npapi_plugin.so
+/chromium-extension/manifest.json
+/chromium-extension/res/*
+/desktop-webapp-extension.pem
