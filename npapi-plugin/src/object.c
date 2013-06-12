@@ -34,6 +34,7 @@
 typedef struct {
   NPObject object;
   GHashTable *methods;
+  GQueue *ignored_desktop_files;
 } WebappObjectWrapper;
 
 typedef NPVariant (*WebappMethod) (NPObject *object,
@@ -54,6 +55,7 @@ NPClass_Allocate (NPP instance, NPClass *klass)
   WebappObjectWrapper *wrapper = g_new0 (WebappObjectWrapper, 1);
 
   wrapper->methods = g_hash_table_new (g_str_hash, g_str_equal);
+  wrapper->ignored_desktop_files = g_queue_new ();
 
   return (NPObject *) wrapper;
 }
@@ -64,7 +66,9 @@ NPClass_Deallocate (NPObject *npobj)
   WebappObjectWrapper *wrapper = (WebappObjectWrapper *) npobj;
 
   g_return_if_fail (wrapper != NULL);
+
   g_hash_table_unref (wrapper->methods);
+  g_queue_free_full (wrapper->ignored_desktop_files, g_free);
 
   g_free (wrapper);
 }
@@ -248,8 +252,10 @@ install_chrome_app_wrapper (NPObject *object,
 			    const NPVariant *args,
 			    uint32_t argc)
 {
+  WebappObjectWrapper *wrapper = (WebappObjectWrapper *) object;
   NPVariant result;
   gchar *app_id = NULL, *name = NULL, *description = NULL, *command = NULL, *icon = NULL;
+  GList *ignored_link = NULL;
   gchar *desktop_file_path = NULL, *desktop_file = NULL;
 
   NULL_TO_NPVARIANT (result);
@@ -283,6 +289,19 @@ install_chrome_app_wrapper (NPObject *object,
     g_debug ("%s empty URL", G_STRFUNC);
     goto out;
   }
+
+  ignored_link = g_queue_find_custom (wrapper->ignored_desktop_files,
+      app_id, (GCompareFunc) g_strcmp0);
+  if (ignored_link != NULL) {
+    /* It's an update for a pre-installed app and we want to ignore it.
+     * This avoids the creation of a desktop file just because a
+     * pre-installed app was updated */
+    g_debug ("%s ignoring %s (%s)", G_STRFUNC, app_id, name);
+    goto out;
+  }
+
+  g_debug ("%s installing desktop file for %s (%s)", G_STRFUNC, app_id,
+      name);
 
   /* Create .desktop file in ~/.local/share/applications */
   desktop_file_path = get_desktop_file_path (app_id, &desktop_file);
@@ -376,6 +395,51 @@ install_chrome_app_wrapper (NPObject *object,
   g_free (name);
   g_free (description);
   g_free (command);
+
+  return result;
+}
+
+static NPVariant
+ignore_chrome_app_wrapper (NPObject *object,
+			   const NPVariant *args,
+			   uint32_t argc)
+{
+  WebappObjectWrapper *wrapper = (WebappObjectWrapper *) object;
+  NPVariant result;
+  gchar *app_id = NULL;
+  gchar *desktop_file_path = NULL;
+
+  NULL_TO_NPVARIANT (result);
+
+  g_debug ("%s called", G_STRFUNC);
+
+  if (G_UNLIKELY (argc < 1 &&
+		  !NPVARIANT_IS_STRING (args[0]))) {
+    g_debug ("%s() string expected for all arguments", G_STRFUNC);
+    return result;
+  }
+
+  app_id = variant_to_string (args[0]);
+  if (G_UNLIKELY (app_id == NULL)) {
+    g_debug ("%s empty app id", G_STRFUNC);
+    return result;
+  }
+
+  desktop_file_path = get_desktop_file_path (app_id, NULL);
+  if (g_file_test (desktop_file_path, G_FILE_TEST_EXISTS)) {
+    /* This app already has a .desktop file installed. We are not going
+     * to ignore feature updates */
+    g_debug ("%s not ignoring app with ID %s", G_STRFUNC, app_id);
+    g_free (app_id);
+  } else {
+    /* This means that the app is a pre-installed  Chrome app and we don't
+     * want to show it on the desktop */
+    g_debug ("%s ignoring installed app with ID %s", G_STRFUNC, app_id);
+    /* Leave ownership of app_id */
+    g_queue_push_head (wrapper->ignored_desktop_files, app_id);
+  }
+
+  g_free (desktop_file_path);
 
   return result;
 }
@@ -583,8 +647,10 @@ uninstall_chrome_app_wrapper (NPObject *object,
 			      const NPVariant *args,
 			      uint32_t argc)
 {
+  WebappObjectWrapper *wrapper = (WebappObjectWrapper *) object;
   NPVariant result;
   gchar *app_id, *file_path, *desktop_file;
+  GList *ignored_link = NULL;
 
   NULL_TO_NPVARIANT (result);
 
@@ -599,6 +665,15 @@ uninstall_chrome_app_wrapper (NPObject *object,
   if (G_UNLIKELY (app_id == NULL)) {
     g_debug ("%s empty app id", G_STRFUNC);
     return result;
+  }
+
+  /* If the user uninstalls a default app, we want not to ignore it any more
+   * in case it's installed again */
+  ignored_link = g_queue_find_custom (wrapper->ignored_desktop_files,
+      app_id, (GCompareFunc) g_strcmp0);
+  if (ignored_link != NULL) {
+    g_debug ("%s removing %s from ignore list", G_STRFUNC, app_id);
+    g_queue_delete_link (wrapper->ignored_desktop_files, ignored_link);
   }
 
   /* Remove the .desktop file in ~/.local/share/applications */
@@ -671,6 +746,9 @@ webapp_create_plugin_object (NPP instance)
   g_hash_table_insert (wrapper->methods,
 		       (gchar *) "uninstallChromeApp",
 		       uninstall_chrome_app_wrapper);
+  g_hash_table_insert (wrapper->methods,
+		       (gchar *) "ignoreChromeApp",
+		       ignore_chrome_app_wrapper);
   g_hash_table_insert (wrapper->methods,
 		       (gchar *) "setIconLoaderCallback",
 		       set_icon_loader_callback_wrapper);
