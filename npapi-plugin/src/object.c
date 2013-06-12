@@ -435,7 +435,7 @@ get_icon_for_url (const gchar *desktop_file_path, const gchar *url)
 
         g_strfreev (exec_args);
       } else {
-        g_debug ("%s failed parsing command line %s: %s", s, error->message);
+        g_debug ("%s failed parsing command line %s: %s", G_STRFUNC, s, error->message);
         g_error_free (error);
       }
 
