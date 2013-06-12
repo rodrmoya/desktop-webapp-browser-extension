@@ -79,3 +79,15 @@ chrome.management.onUninstalled.addListener (function(id) {
     console.log ("Uninstalling Chrome app " + id);
     plugin.uninstallChromeApp (id);
 });
+
+chrome.management.getAll (function (all_apps) {
+    for (var i = 0; i < all_apps.length; i++) {
+        var info = all_apps[i];
+        /* If this app doesn't already have a desktop file it will
+         * be ignored. Doing so means we can ignore pre-installed
+         * apps */
+        console.log("Potentially ignoring app " + info.id +
+            "(" + info.name + ")");
+        plugin.ignoreChromeApp (info.id);
+    }
+});
