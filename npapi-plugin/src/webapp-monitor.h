@@ -31,4 +31,7 @@ void      webapp_initialize_monitor (NPP instance);
 void      webapp_monitor_set_icon_loader_callback (NPObject *callback);
 void      webapp_destroy_monitor (void);
 
+/* util */
+void      webapp_add_to_favorites (const char *favorite);
+
 #endif

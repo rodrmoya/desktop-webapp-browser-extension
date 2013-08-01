@@ -24,6 +24,7 @@
 
 #include <string.h>
 #include <glib.h>
+#include <glib/gstdio.h>
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 #include "webapp-monitor.h"
@@ -32,6 +33,7 @@ typedef struct {
   GObject object;
 
   GFileMonitor *file_monitor;
+  GFileMonitor *desktop_file_monitor;
   NPP instance;
   NPObject *icon_loader_callback;
 } WebappMonitor;
@@ -49,10 +51,8 @@ webapp_monitor_finalize (GObject *object)
 {
   WebappMonitor *monitor = (WebappMonitor *) object;
 
-  if (monitor->file_monitor != NULL) {
-    g_object_unref (monitor->file_monitor);
-    monitor->file_monitor = NULL;
-  }
+  g_clear_object (&monitor->file_monitor);
+  g_clear_object (&monitor->desktop_file_monitor);
 
   if (monitor->icon_loader_callback != NULL) {
     NPN_ReleaseObject (monitor->icon_loader_callback);
@@ -178,6 +178,89 @@ retrieve_highres_icon (WebappMonitor *monitor, const gchar *desktop_file)
   g_key_file_free (key_file);
 }
 
+void
+webapp_add_to_favorites (const char *favorite)
+{
+  GSettings *settings;
+  gchar **favorite_apps;
+  GPtrArray *apps_array;
+
+  g_debug ("%s called, fav: %s", G_STRFUNC, favorite);
+
+  /* Add newly-installed app to Shell's favorites */
+  settings = g_settings_new ("org.gnome.shell");
+
+  apps_array = g_ptr_array_new ();
+  favorite_apps = g_settings_get_strv (settings, "favorite-apps");
+  if (favorite_apps != NULL) {
+    guint idx;
+
+    for (idx = 0; favorite_apps[idx] != NULL; idx++) {
+      g_ptr_array_add (apps_array, favorite_apps[idx]);
+    }
+  }
+
+  g_ptr_array_add (apps_array, (gpointer) favorite);
+  g_ptr_array_add (apps_array, NULL);
+
+  g_settings_set_strv (settings, "favorite-apps", (const gchar *const *) apps_array->pdata);
+
+  g_strfreev (favorite_apps);
+  g_ptr_array_free (apps_array, TRUE);
+  g_object_unref (settings);
+}
+
+static void
+on_desktop_directory_changed (GFileMonitor     *file_monitor,
+			      GFile            *file,
+			      GFile            *other_file,
+			      GFileMonitorEvent event_type,
+			      gpointer          user_data)
+{
+  const gchar *file_path = g_file_get_path (file);
+  GError *error = NULL;
+  gchar *contents, *new_path;
+
+  /* ~/Desktop has changed. We do the following:
+   * - Check if it's a new chrome-*.desktop file
+   * - Create a .desktop file for it in ~/.local/share/applications as
+   *   the user may have only selected 'Desktop' and not 'Menus'
+   * - Add it to favorite-apps
+   */
+
+  g_debug ("%s called", G_STRFUNC);
+
+  if (event_type != G_FILE_MONITOR_EVENT_CREATED)
+    return;
+
+  if (!g_str_has_prefix (g_path_get_basename (file_path), "chrome-"))
+    return;
+  if (!g_str_has_suffix (g_path_get_basename (file_path), ".desktop"))
+    return;
+
+  if (!g_file_get_contents (file_path, &contents, NULL, &error)) {
+    g_warning ("Could not read %s file: %s", file_path, error->message);
+    g_clear_error (&error);
+    return;
+  }
+
+  new_path = g_build_filename (g_get_home_dir (), ".local/share/applications",
+			       g_path_get_basename (file_path), NULL);
+  if (!g_file_set_contents (new_path, contents, -1, &error)) {
+    g_warning ("Could not write %s file: %s", new_path, error->message);
+    g_error_free (error);
+    goto out;
+  }
+
+  if (!g_unlink (file_path))
+    g_debug ("Could not remove file %s\n", file_path);
+
+  webapp_add_to_favorites (g_path_get_basename (file_path));
+
+out:
+  g_free (new_path);
+}
+
 static void
 on_directory_changed (GFileMonitor     *file_monitor,
 		      GFile            *file,
@@ -275,7 +358,25 @@ webapp_monitor_init (WebappMonitor *monitor)
     /* Listen to changes in the ~/.local/share/applications directory */
     g_signal_connect (monitor->file_monitor, "changed", G_CALLBACK (on_directory_changed), monitor);
   } else {
-    g_error ("Error monitoring directory: %s\n", error->message);
+    g_error ("Error monitoring directory %s: %s\n", path, error->message);
+    g_error_free (error);
+  }
+
+  g_free (path);
+  g_object_unref (file);
+
+  /* Also monitor ~/Desktop as .desktop files are created there by
+   * 'Tools->Create Application Shortcuts' or by right click on an
+   * app -> Create Shortcuts and selecting 'Desktop' */
+  path = g_strdup_printf ("%s", g_get_user_special_dir (G_USER_DIRECTORY_DESKTOP));
+  file = g_file_new_for_path (path);
+  error = NULL;
+
+  monitor->desktop_file_monitor = g_file_monitor_directory (file, 0, NULL, &error);
+  if (monitor->desktop_file_monitor) {
+    g_signal_connect (monitor->desktop_file_monitor, "changed", G_CALLBACK (on_desktop_directory_changed), monitor);
+  } else {
+    g_error ("Error monitoring directory %s: %s\n", path, error->message);
     g_error_free (error);
   }
 

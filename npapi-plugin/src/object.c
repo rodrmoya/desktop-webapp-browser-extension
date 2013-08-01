@@ -309,9 +309,6 @@ install_chrome_app_wrapper (NPObject *object,
     GKeyFile *key_file = g_key_file_new ();
     gchar *exec, *contents;
     gsize size;
-    GSettings *settings;
-    gchar **favorite_apps;
-    GPtrArray *apps_array;
     const gchar *categories[] = { "Network", "WebBrowser" };
 
     g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_NAME, name);
@@ -366,26 +363,7 @@ install_chrome_app_wrapper (NPObject *object,
     g_free (desktop_file_path);
 
     /* Add newly-installed app to Shell's favorites */
-    settings = g_settings_new ("org.gnome.shell");
-
-    apps_array = g_ptr_array_new ();
-    favorite_apps = g_settings_get_strv (settings, "favorite-apps");
-    if (favorite_apps != NULL) {
-      guint idx;
-
-      for (idx = 0; favorite_apps[idx] != NULL; idx++) {
-	g_ptr_array_add (apps_array, favorite_apps[idx]);
-      }
-    }
-
-    g_ptr_array_add (apps_array, desktop_file);
-    g_ptr_array_add (apps_array, NULL);
-
-    g_settings_set_strv (settings, "favorite-apps", (const gchar *const *) apps_array->pdata);
-
-    g_strfreev (favorite_apps);
-    g_ptr_array_free (apps_array, TRUE);
-    g_object_unref (settings);
+    webapp_add_to_favorites (desktop_file);
   }
 
   g_free (desktop_file);
