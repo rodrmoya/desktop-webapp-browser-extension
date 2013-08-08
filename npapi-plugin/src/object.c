@@ -307,7 +307,7 @@ install_chrome_app_wrapper (NPObject *object,
   desktop_file_path = get_desktop_file_path (app_id, &desktop_file);
   if (desktop_file_path != NULL) {
     GKeyFile *key_file = g_key_file_new ();
-    gchar *exec, *contents;
+    gchar *exec, *contents, *crx_app_id;
     gsize size;
     const gchar *categories[] = { "Network", "WebBrowser" };
 
@@ -325,9 +325,10 @@ install_chrome_app_wrapper (NPObject *object,
     g_key_file_set_string_list (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_CATEGORIES, categories, G_N_ELEMENTS (categories));
     g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_TYPE, G_KEY_FILE_DESKTOP_TYPE_APPLICATION);
     g_key_file_set_boolean (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_STARTUP_NOTIFY, TRUE);
-    g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP,
-			   G_KEY_FILE_DESKTOP_KEY_STARTUP_WM_CLASS,
-			   "chrome.google.com__webstore_category_home");
+
+    crx_app_id = g_strdup_printf ("crx_%s", app_id);
+    g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_STARTUP_WM_CLASS, crx_app_id);
+    g_free (crx_app_id);
 
     /* Retrieve icon data and save it */
     icon = variant_to_string (args[4]);
