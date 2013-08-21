@@ -210,6 +210,35 @@ webapp_add_to_favorites (const char *favorite)
   g_object_unref (settings);
 }
 
+/* Workaround for https://code.google.com/p/chromium/issues/detail?id=247574
+ * TODO: drop this hack when we no longer support Chrome << 29
+ */
+static gboolean
+fix_exec_line (gchar **contents)
+{
+  if (strstr (*contents, "Exec=/opt/google/chrome/chrome"))
+    {
+      GString *string;
+      gssize pos;
+
+      g_debug ("New desktop file has wrong Exec line, amending it");
+
+      pos = strstr (*contents, "Exec=/opt/google/chrome/chrome") - *contents;
+      pos += strlen ("Exec=/opt/google/chrome/");
+
+      string = g_string_new (*contents);
+
+      g_string_insert (string, pos, "google-");
+
+      g_free (*contents);
+      *contents = g_string_free (string, FALSE);
+
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
 static void
 on_desktop_directory_changed (GFileMonitor     *file_monitor,
 			      GFile            *file,
@@ -243,6 +272,8 @@ on_desktop_directory_changed (GFileMonitor     *file_monitor,
     g_clear_error (&error);
     return;
   }
+
+  fix_exec_line (&contents);
 
   new_path = g_build_filename (g_get_home_dir (), ".local/share/applications",
 			       g_path_get_basename (file_path), NULL);
@@ -282,32 +313,18 @@ on_directory_changed (GFileMonitor     *file_monitor,
        return;
 
      if (g_file_get_contents (file_path, &contents, &len, &error)) {
-       gchar *tmp = contents;
-       const gchar *shebang = "#!/usr/bin/env xdg-open";
-
        g_debug ("Old contents = %s\n", contents);
 
-       /* Read 1st line */
-       if (g_str_has_prefix (contents, shebang)) {
-	 tmp += strlen (shebang);
-	 if (*tmp == '[') {
-	   GString *new_contents = g_string_new (shebang);
-
-	   new_contents = g_string_append (new_contents, "\n");
-	   new_contents = g_string_append (new_contents, tmp);
-
-	   if (!g_file_set_contents (file_path, new_contents->str, new_contents->len, &error)) {
+       if (fix_exec_line (&contents)) {
+	   if (!g_file_set_contents (file_path, contents, -1, &error)) {
 	     g_warning ("Could not write %s file: %s", file_path, error->message);
 	     g_error_free (error);
 	   } else {
-	     g_debug ("New contents: %s\n", new_contents->str);
-	     retrieve_highres_icon (monitor, new_contents->str);
+	     g_debug ("New contents: %s\n", contents);
 	   }
+       }
 
-	   g_string_free (new_contents, TRUE);
-	 }
-       } else
-	 retrieve_highres_icon (monitor, contents);
+       retrieve_highres_icon (monitor, contents);
 
        g_free (contents);
 
