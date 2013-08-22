@@ -317,7 +317,7 @@ install_chrome_app_wrapper (NPObject *object,
       g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_COMMENT, description);
     }
 
-    exec = g_strdup_printf ("chromium \"--app=%s\"", command);
+    exec = g_strdup_printf ("chromium \"--app-id=%s\"", app_id);
     g_key_file_set_string (key_file, G_KEY_FILE_DESKTOP_GROUP, G_KEY_FILE_DESKTOP_KEY_EXEC, exec);
     g_free (exec);
 
